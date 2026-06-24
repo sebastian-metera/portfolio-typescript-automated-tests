@@ -1,18 +1,42 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, APIRequestContext, APIResponse } from "@playwright/test";
 import { testConfig } from "../../src/core/test-config";
 import { request } from "node:http";
 import { ok } from "node:assert";
 
-test.describe("@api get method", () => {
+type BookingQueryParams = {
+  checkin?: string;
+  checkout?: string;
+  lastname?: string;
+};
+
+async function getBookingIds(
+  request: APIRequestContext,
+  params?: BookingQueryParams,
+): Promise<APIResponse> {
+  return request.get(`${testConfig.apiBaseUrl}/booking`, { params });
+}
+
+async function getBookingById(
+  request: APIRequestContext,
+  bookingId: number,
+): Promise<APIResponse> {
+  return request.get(`${testConfig.apiBaseUrl}/booking/${bookingId}`);
+}
+
+function expectJsonContentType(response: APIResponse) {
+  expect(response.headers()["content-type"]).toContain("application/json");
+}
+
+test.describe("@api get booking ids", () => {
   test("get all booking ids", async ({ request }) => {
     type BookingIdResponse = {
       bookingid: number;
     };
 
-    const response = await request.get(`${testConfig.apiBaseUrl}/booking`);
+    const response = await getBookingIds(request);
 
     expect(response.status()).toBe(200);
-    expect(response.headers()["content-type"]).toContain("application/json");
+    expectJsonContentType(response);
 
     const body = (await response.json()) as BookingIdResponse[];
 
@@ -27,12 +51,10 @@ test.describe("@api get method", () => {
   test("should not have any bookings - filter by last name", async ({
     request,
   }) => {
-    const response = await request.get(
-      `${testConfig.apiBaseUrl}/booking?lastname=brown`,
-    );
+    const response = await getBookingIds(request, { lastname: "brown" });
 
     expect(response.status()).toBe(200);
-    expect(response.headers()["content-type"]).toContain("application/json");
+    expectJsonContentType(response);
 
     const body = await response.json();
 
@@ -40,15 +62,14 @@ test.describe("@api get method", () => {
   });
 
   test("should filter by checkin date", async ({ request }) => {
-    const response = await request.get(
-      `${testConfig.apiBaseUrl}/booking?checkin=2025-01-01`,
-    );
     type BookingIdResponse = {
       bookingid: number;
     };
 
+    const response = await getBookingIds(request, { checkin: "2025-01-01" });
+
     expect(response.status()).toBe(200);
-    expect(response.headers()["content-type"]).toContain("application/json");
+    expectJsonContentType(response);
 
     const body = (await response.json()) as BookingIdResponse[];
 
@@ -67,12 +88,10 @@ test.describe("@api get method", () => {
     };
 
     const today = new Date().toISOString().split("T")[0];
-    const response = await request.get(
-      `${testConfig.apiBaseUrl}/booking?checkout=${today}`,
-    );
+    const response = await getBookingIds(request, { checkout: today });
 
     expect(response.status()).toBe(200);
-    expect(response.headers()["content-type"]).toContain("application/json");
+    expectJsonContentType(response);
 
     const body = (await response.json()) as BookingIdResponse[];
     const bookingIds = body.map((item) => item.bookingid);
@@ -85,9 +104,7 @@ test.describe("@api get method", () => {
       bookingid: number;
     };
 
-    const response = await request.get(
-      `${testConfig.apiBaseUrl}/booking?checkout=2020-12-31`,
-    );
+    const response = await getBookingIds(request, { checkout: "2020-12-31" });
 
     expect(response.status()).toBe(200);
 
@@ -103,9 +120,10 @@ test.describe("@api get method", () => {
     type BookingIdResponse = {
       bookingid: number;
     };
-    const response = await request.get(
-      `${testConfig.apiBaseUrl}/booking?checkin=2026-01-01&checkout=2026-06-22`,
-    );
+    const response = await getBookingIds(request, {
+      checkin: "2026-01-01",
+      checkout: "2026-06-22",
+    });
 
     expect(response.status()).toBe(200);
 
@@ -119,7 +137,10 @@ test.describe("@api get method", () => {
   test("should return error when checkin later than checkout", async ({
     request,
   }) => {
-    const response = await request.get(`${testConfig.apiBaseUrl}/booking`);
+    const response = await getBookingIds(request, {
+      checkin: "2027-10-01",
+      checkout: "2026-11-01",
+    });
 
     expect(response.status()).toBeGreaterThanOrEqual(400);
 
@@ -127,14 +148,16 @@ test.describe("@api get method", () => {
     expect(body).not.toHaveProperty("bookingid");
     expect(body.message).toContain("Invalid date range"); //assumption, since they send 200 OK with empty array
   });
+});
 
+test.describe("@api get bookings by id", () => {
   test("should return all fields of details of specific booking", async ({
     request,
   }) => {
-    const response = await request.get(`${testConfig.apiBaseUrl}/booking/11`);
+    const response = await getBookingById(request, 11);
 
     expect(response.status()).toBe(200);
-    expect(response.headers()["content-type"]).toContain("application/json");
+    expectJsonContentType(response);
     expect(parseInt(response.headers()["content-length"])).toBeGreaterThan(0);
 
     const body = await response.json();
@@ -155,10 +178,10 @@ test.describe("@api get method", () => {
   test("should return details of booking without additional needs field", async ({
     request,
   }) => {
-    const response = await request.get(`${testConfig.apiBaseUrl}/booking/1`);
+    const response = await getBookingById(request, 1);
 
-    expect(response.ok()).toBeTruthy();
-    expect(response.headers()["content-type"]).toContain("application/json");
+    expect(response.status()).toBe(200);
+    expectJsonContentType(response);
 
     const body = await response.json();
 
@@ -175,10 +198,10 @@ test.describe("@api get method", () => {
   test("should return 404 error for non-existing booking id", async ({
     request,
   }) => {
-    const response = await request.get(`${testConfig.apiBaseUrl}/booking/9999`);
+    const response = await getBookingById(request, 9999);
 
     expect(response.status()).toBe(404);
-    expect(response.headers()['content-type']).toContain('text/plain');
-    expect(await response.text()).toBe('Not Found');
+    expect(response.headers()["content-type"]).toContain("text/plain");
+    expect(await response.text()).toBe("Not Found");
   });
 });
