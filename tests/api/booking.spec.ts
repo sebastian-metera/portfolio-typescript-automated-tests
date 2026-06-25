@@ -3,6 +3,8 @@ import { testConfig } from "../../src/core/test-config";
 import { request } from "node:http";
 import { ok } from "node:assert";
 
+const apiUrl: string = testConfig.apiBaseUrl;
+
 type BookingQueryParams = {
   checkin?: string;
   checkout?: string;
@@ -13,14 +15,14 @@ async function getBookingIds(
   request: APIRequestContext,
   params?: BookingQueryParams,
 ): Promise<APIResponse> {
-  return request.get(`${testConfig.apiBaseUrl}/booking`, { params });
+  return request.get(`${apiUrl}/booking`, { params });
 }
 
 async function getBookingById(
   request: APIRequestContext,
   bookingId: number,
 ): Promise<APIResponse> {
-  return request.get(`${testConfig.apiBaseUrl}/booking/${bookingId}`);
+  return request.get(`${apiUrl}/booking/${bookingId}`);
 }
 
 function expectJsonContentType(response: APIResponse) {
@@ -204,4 +206,52 @@ test.describe("@api get bookings by id", () => {
     expect(response.headers()["content-type"]).toContain("text/plain");
     expect(await response.text()).toBe("Not Found");
   });
+});
+
+test.describe("@api create bookings", () => {
+  test("Should create booking using JSON", async ({ request }) => {
+    const response = await request.post(`${apiUrl}/booking`, {
+      data: {
+        firstname: "Betty",
+        lastname: "Stayer",
+        totalprice: 128,
+        depositpaid: true,
+        bookingdates: {
+          checkin: "2027-01-01",
+          checkout: "2027-01-17",
+        },
+        additionalneeds: "Late check-in, between 20 and 22",
+      },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toHaveProperty("bookingid");
+    expect(responseBody.booking).toStrictEqual({
+      firstname: "Betty",
+      lastname: "Stayer",
+      totalprice: 128,
+      depositpaid: true,
+      bookingdates: {
+        checkin: "2027-01-01",
+        checkout: "2027-01-17",
+      },
+      additionalneeds: "Late check-in, between 20 and 22",
+    });
+  });
+
+  // should create booking using XML
+
+  // should create booking without additionalneeds field
+
+  // should return error: incomplete booking details
+  // should return error: dates in past
+  // should return error: checkin later than checkout
+  // should return error: price not a number
 });
