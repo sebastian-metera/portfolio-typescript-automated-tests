@@ -246,7 +246,40 @@ test.describe("@api create bookings", () => {
     });
   });
 
-  // should create booking using XML
+  test("should create booking using XML", async ({ request }) => {
+    const response = await request.post(`${testConfig.apiBaseUrl}/booking`, {
+      // headers: { "content-type": "application/xml", accept: "application/xml" }, 
+      // they don't accept "application/json" as a payload...
+      headers: { "content-type": "text/xml", accept: "application/xml" },
+      data: `
+      <?xml version="1.0" encoding="utf-8"?>
+        <booking>
+          <firstname>Joe</firstname>
+          <lastname>Doghn</lastname>
+          <totalprice>456</totalprice>
+          <depositpaid>true</depositpaid>
+          <bookingdates>
+            <checkin>2027-01-01</checkin>
+            <checkout>2027-01-11</checkout>
+          </bookingdates>
+          <additionalneeds>Breakfast</additionalneeds>
+        </booking>
+        `,
+    });
+
+    expect(response.status()).toBe(200);
+    // expect(response.headers()["content-type"]).toBe("application/xml");
+    // they don't send response in "application/xml" type but in... "text/html" 
+    expect(response.headers()["content-type"]).toContain("text/html");
+
+    const responseBody = await response.text();
+
+    expect(responseBody).toContain("<created-booking>");
+    expect(responseBody).toContain("<bookingid>");
+    expect(responseBody).toContain("<additionalneeds>");
+    expect(responseBody).toContain("<checkin>2027-01-01</checkin>");
+    expect(responseBody).toContain("<checkout>2027-01-11</checkout>");
+  });
 
   // should create booking without additionalneeds field
 
