@@ -2,8 +2,9 @@ import { test, expect, APIRequestContext, APIResponse } from "@playwright/test";
 import { testConfig } from "../../src/core/test-config";
 import { request } from "node:http";
 import { ok } from "node:assert";
+import { create } from "node:domain";
 
-const apiUrl: string = testConfig.apiBaseUrl;
+const bookingUrl: string = testConfig.apiBaseUrl + "/booking";
 
 type BookingQueryParams = {
   checkin?: string;
@@ -11,18 +12,38 @@ type BookingQueryParams = {
   lastname?: string;
 };
 
+interface Payload {
+  firstname: string;
+  lastname: string;
+  totalprice: number;
+  depositpaid: boolean;
+  bookingdates: {
+    checkin: string;
+    checkout: string;
+  };
+  additionalneeds?: string;
+}
+
 async function getBookingIds(
   request: APIRequestContext,
   params?: BookingQueryParams,
 ): Promise<APIResponse> {
-  return request.get(`${apiUrl}/booking`, { params });
+  return request.get(bookingUrl, { params });
 }
 
 async function getBookingById(
   request: APIRequestContext,
   bookingId: number,
 ): Promise<APIResponse> {
-  return request.get(`${apiUrl}/booking/${bookingId}`);
+  return request.get(`${bookingUrl}/${bookingId}`);
+}
+
+function createBooking(
+  request: APIRequestContext,
+  payload: Payload | string,
+  headers?: { "content-type": string; accept: string },
+): Promise<APIResponse> {
+  return request.post(bookingUrl, { data: payload, headers: headers });
 }
 
 function expectJsonContentType(response: APIResponse) {
@@ -209,31 +230,8 @@ test.describe("@api get bookings by id", () => {
 });
 
 test.describe("@api create bookings", () => {
-  test("Should create booking using JSON", async ({ request }) => {
-    const response = await request.post(`${apiUrl}/booking`, {
-      data: {
-        firstname: "Betty",
-        lastname: "Stayer",
-        totalprice: 128,
-        depositpaid: true,
-        bookingdates: {
-          checkin: "2027-01-01",
-          checkout: "2027-01-17",
-        },
-        additionalneeds: "Late check-in, between 20 and 22",
-      },
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-      },
-    });
-
-    expect(response.status()).toBe(200);
-
-    const responseBody = await response.json();
-
-    expect(responseBody).toHaveProperty("bookingid");
-    expect(responseBody.booking).toStrictEqual({
+  test("should create booking using JSON explicitly", async ({ request }) => {
+    const payload = {
       firstname: "Betty",
       lastname: "Stayer",
       totalprice: 128,
@@ -243,16 +241,25 @@ test.describe("@api create bookings", () => {
         checkout: "2027-01-17",
       },
       additionalneeds: "Late check-in, between 20 and 22",
-    });
+    };
+    const requestHeadersJson = {
+        "content-type": "application/json",
+        accept: "application/json",
+      };
+    const response = await createBooking(request, payload, requestHeadersJson);
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain("application/json");
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toHaveProperty("bookingid");
+    expect(responseBody.booking).toStrictEqual(payload);
   });
 
   test("should create booking using XML", async ({ request }) => {
-    const response = await request.post(`${testConfig.apiBaseUrl}/booking`, {
-      // headers: { "content-type": "application/xml", accept: "application/xml" }, 
-      // they don't accept "application/json" as a payload...
-      headers: { "content-type": "text/xml", accept: "application/xml" },
-      data: `
-      <?xml version="1.0" encoding="utf-8"?>
+    const requestHeadersXml = { "content-type": "text/xml", accept: "application/xml" };
+    const payloadXml = `<?xml version="1.0" encoding="utf-8"?>
         <booking>
           <firstname>Joe</firstname>
           <lastname>Doghn</lastname>
@@ -263,27 +270,57 @@ test.describe("@api create bookings", () => {
             <checkout>2027-01-11</checkout>
           </bookingdates>
           <additionalneeds>Breakfast</additionalneeds>
-        </booking>
-        `,
-    });
+        </booking>`;
+    const response = await createBooking(request, payloadXml, requestHeadersXml);
 
     expect(response.status()).toBe(200);
     // expect(response.headers()["content-type"]).toBe("application/xml");
-    // they don't send response in "application/xml" type but in... "text/html" 
+    // they don't send response in "application/xml" type but in... "text/html"
     expect(response.headers()["content-type"]).toContain("text/html");
 
     const responseBody = await response.text();
 
     expect(responseBody).toContain("<created-booking>");
     expect(responseBody).toContain("<bookingid>");
-    expect(responseBody).toContain("<additionalneeds>");
+    expect(responseBody).toContain("<firstname>Joe</firstname>");
+    expect(responseBody).toContain("<lastname>Doghn</lastname>");
+    expect(responseBody).toContain(
+      "<additionalneeds>Breakfast</additionalneeds>",
+    );
     expect(responseBody).toContain("<checkin>2027-01-01</checkin>");
     expect(responseBody).toContain("<checkout>2027-01-11</checkout>");
   });
 
-  // should create booking without additionalneeds field
+  test("should create booking without 'additional needs' field", async ({
+    request,
+  }) => {
+    const payload = {
+      firstname: "Mark",
+      lastname: "Noadd-needer",
+      totalprice: 128,
+      depositpaid: true,
+      bookingdates: {
+        checkin: "2027-01-01",
+        checkout: "2027-01-17",
+      },
+    };
+    const response = await createBooking(request, payload);
 
-  // should return error: incomplete booking details
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain("application/json");
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toHaveProperty("bookingid");
+    expect(responseBody.bookingid).toBeGreaterThan(1000);
+    expect(responseBody.booking).not.toHaveProperty("additionalneeds");
+    expect(responseBody.booking).toEqual(payload);
+  });
+
+  // TODO:
+  // should return error: incomplete booking details - missing names
+  // should return error: incomplete booking details - missing price
+  // should return error: incomplete booking details - missing booking dates
   // should return error: dates in past
   // should return error: checkin later than checkout
   // should return error: price not a number
