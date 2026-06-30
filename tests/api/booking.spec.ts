@@ -38,12 +38,20 @@ async function getBookingById(
   return request.get(`${bookingUrl}/${bookingId}`);
 }
 
-function createBooking(
+async function createBooking(
   request: APIRequestContext,
   payload: Payload | string,
   headers?: { "content-type": string; accept: string },
 ): Promise<APIResponse> {
   return request.post(bookingUrl, { data: payload, headers: headers });
+}
+
+async function getAuthToken(request: APIRequestContext): Promise<APIResponse> {
+  const response = await request.post(`${testConfig.apiBaseUrl}/auth`, {
+    data: { username: "admin", password: "password123" },
+  });
+  const { token } = await response.json();
+  return token;
 }
 
 function expectJsonContentType(response: APIResponse) {
@@ -229,7 +237,7 @@ test.describe("@api get bookings by id", () => {
   });
 });
 
-test.describe("@api create bookings", () => {
+test.describe("@api create booking", () => {
   test("should create booking using JSON explicitly", async ({ request }) => {
     const payload = {
       firstname: "Betty",
@@ -243,9 +251,9 @@ test.describe("@api create bookings", () => {
       additionalneeds: "Late check-in, between 20 and 22",
     };
     const requestHeadersJson = {
-        "content-type": "application/json",
-        accept: "application/json",
-      };
+      "content-type": "application/json",
+      accept: "application/json",
+    };
     const response = await createBooking(request, payload, requestHeadersJson);
 
     expect(response.status()).toBe(200);
@@ -258,7 +266,10 @@ test.describe("@api create bookings", () => {
   });
 
   test("should create booking using XML", async ({ request }) => {
-    const requestHeadersXml = { "content-type": "text/xml", accept: "application/xml" };
+    const requestHeadersXml = {
+      "content-type": "text/xml",
+      accept: "application/xml",
+    };
     const payloadXml = `<?xml version="1.0" encoding="utf-8"?>
         <booking>
           <firstname>Joe</firstname>
@@ -271,7 +282,11 @@ test.describe("@api create bookings", () => {
           </bookingdates>
           <additionalneeds>Breakfast</additionalneeds>
         </booking>`;
-    const response = await createBooking(request, payloadXml, requestHeadersXml);
+    const response = await createBooking(
+      request,
+      payloadXml,
+      requestHeadersXml,
+    );
 
     expect(response.status()).toBe(200);
     // expect(response.headers()["content-type"]).toBe("application/xml");
@@ -324,4 +339,49 @@ test.describe("@api create bookings", () => {
   // should return error: dates in past
   // should return error: checkin later than checkout
   // should return error: price not a number
+});
+
+test.describe("@api update booking via PUT", () => {
+  test("should update booking using JSON - new dates", async ({ request }) => {
+    const token = await getAuthToken(request);
+    const updatedBooking = {
+      firstname: "James",
+      lastname: "Brown",
+      totalprice: 111,
+      depositpaid: true,
+      bookingdates: {
+        checkin: "2028-01-01",
+        checkout: "2029-01-01",
+      },
+      additionalneeds: "Breakfast",
+    };
+    const response = await request.put(`${bookingUrl}/1`, {
+      data: updatedBooking,
+      headers: { cookie: `token=${token}` },
+    });
+
+    expect(response.status()).toBe(200);
+  });
+
+  test("should update booking using XML", ({ request }) => {});
+
+  // they always return 403 while using 'Authorization' header
+  // so instead of checking happy path, this scenario checks they return "correct" error
+  test("should NOT update booking using auth via 'Authorization' header", ({
+    request,
+  }) => {});
+
+  // "should return error: missing token"
+  // "should return error: missing booking id"
+  // "should return error: update using ony 1 field in payload"
+
+  // other cases to be checked if the API would not rotate data
+  // "should accept new names"
+  // "should accept lower price"
+  // "should add additional needs" // for booking that has no additional needs
+  // "should update with all new booking details"
+});
+
+test.describe("@api @patch update booking partially", () => {
+  test("", async ({request}) => {});
 });
