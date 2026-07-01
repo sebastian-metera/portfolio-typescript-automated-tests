@@ -46,7 +46,7 @@ async function createBooking(
   return request.post(bookingUrl, { data: payload, headers: headers });
 }
 
-async function getAuthToken(request: APIRequestContext): Promise<APIResponse> {
+async function getAuthToken(request: APIRequestContext): Promise<string> {
   const response = await request.post(`${testConfig.apiBaseUrl}/auth`, {
     data: { username: "admin", password: "password123" },
   });
@@ -57,6 +57,18 @@ async function getAuthToken(request: APIRequestContext): Promise<APIResponse> {
 function expectJsonContentType(response: APIResponse) {
   expect(response.headers()["content-type"]).toContain("application/json");
 }
+
+const updatedBookingPayload = {
+  firstname: "James",
+  lastname: "Brown",
+  totalprice: 111,
+  depositpaid: true,
+  bookingdates: {
+    checkin: "2028-01-01",
+    checkout: "2029-01-01",
+  },
+  additionalneeds: "Breakfast",
+};
 
 test.describe("@api get booking ids", () => {
   test("get all booking ids", async ({ request }) => {
@@ -344,32 +356,68 @@ test.describe("@api create booking", () => {
 test.describe("@api update booking via PUT", () => {
   test("should update booking using JSON - new dates", async ({ request }) => {
     const token = await getAuthToken(request);
-    const updatedBooking = {
-      firstname: "James",
-      lastname: "Brown",
-      totalprice: 111,
-      depositpaid: true,
-      bookingdates: {
-        checkin: "2028-01-01",
-        checkout: "2029-01-01",
-      },
-      additionalneeds: "Breakfast",
-    };
     const response = await request.put(`${bookingUrl}/1`, {
-      data: updatedBooking,
+      data: updatedBookingPayload,
       headers: { cookie: `token=${token}` },
     });
 
     expect(response.status()).toBe(200);
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toEqual(updatedBookingPayload);
   });
 
-  test("should update booking using XML", ({ request }) => {});
+  test("should update booking using XML", async ({ request }) => {
+    const updatedBookingPayloadXml = `<?xml version="1.0" encoding="utf-8"?>
+    <booking>
+    <firstname>James</firstname>
+    <lastname>Brown</lastname>
+    <totalprice>111</totalprice>
+    <depositpaid>true</depositpaid>
+    <bookingdates>
+      <checkin>2028-01-01</checkin>
+      <checkout>2029-01-01</checkout>
+    </bookingdates>
+    <additionalneeds>Breakfast</additionalneeds>
+    </booking>`;
+    const authToken = await getAuthToken(request);
+    const response = await request.put(`${bookingUrl}/1`, {
+      data: updatedBookingPayloadXml,
+      headers: {
+        cookie: `token=${authToken}`,
+        "content-type": "text/xml",
+        accept: "application/xml",
+      },
+    });
 
-  // they always return 403 while using 'Authorization' header
-  // so instead of checking happy path, this scenario checks they return "correct" error
-  test("should NOT update booking using auth via 'Authorization' header", ({
+    expect(response.status()).toBe(200);
+
+    const responseBody = await response.text();
+
+    expect(responseBody).toContain("<booking>");
+    expect(responseBody).toContain("<checkin>2028-01-01</checkin>");
+    expect(responseBody).toContain("<checkout>2029-01-01</checkout>");
+    expect(responseBody).toContain(
+      "<additionalneeds>Breakfast</additionalneeds>",
+    );
+  });
+
+  test("should update booking using auth via 'Authorization' header", async ({
     request,
-  }) => {});
+  }) => {
+    const response = await request.put(`${bookingUrl}/1`, {
+      data: updatedBookingPayload,
+      headers: { authorization: "Basic YWRtaW46cGFzc3dvcmQxMjM=" },
+    });
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain("application/json");
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toEqual(updatedBookingPayload);
+  });
 
   // "should return error: missing token"
   // "should return error: missing booking id"
@@ -383,5 +431,13 @@ test.describe("@api update booking via PUT", () => {
 });
 
 test.describe("@api @patch update booking partially", () => {
-  test("", async ({request}) => {});
+  test("should update part of booking using JSON", async ({ request }) => {});
+
+  // "should update part of booking using XML"
+  // "should update part of booking: lower price"
+  // "should update part of booking: add additional needs"
+  // "should update part of booking: remove additional needs"
+  // "should update booking using many fields at once: names"
+  // "should update booking using many fields at once: price and dates"
+  // ""
 });
