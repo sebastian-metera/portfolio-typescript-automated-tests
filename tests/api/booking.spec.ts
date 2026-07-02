@@ -408,7 +408,7 @@ test.describe("@api update booking via PUT", () => {
   }) => {
     const response = await request.put(`${bookingUrl}/1`, {
       data: updatedBookingPayload,
-      headers: { authorization: "Basic YWRtaW46cGFzc3dvcmQxMjM=" },
+      headers: { authorization: "Basic YWRtaW46cGFzc3dvcmQxMjM=" }, //TODO: move token value to .env despite it's public
     });
 
     expect(response.status()).toBe(200);
@@ -419,9 +419,47 @@ test.describe("@api update booking via PUT", () => {
     expect(responseBody).toEqual(updatedBookingPayload);
   });
 
-  // "should return error: missing token"
-  // "should return error: missing booking id"
-  // "should return error: update using ony 1 field in payload"
+  test("should return error: missing token", async ({ request }) => {
+    const response = await request.put(`${bookingUrl}/1`, {
+      data: updatedBookingPayload,
+    });
+
+    expect(response.status()).toBe(403); //would expect 401, but since they return 403... let it be!
+    expect(await response.text()).toBe("Forbidden");
+  });
+
+  test("should return error: wrong token", async ({ request }) => {
+    const response = await request.put(`${bookingUrl}/1`, {
+      data: updatedBookingPayload,
+      headers: { cookie: "invalid-token" },
+    });
+
+    expect(response.status()).toBe(403);
+    expect(await response.text()).toBe("Forbidden");
+  });
+
+  test("should return error: missing booking id", async ({ request }) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.put(`${bookingUrl}`, {
+      data: updatedBookingPayload,
+      headers: { cookie: `token=${authToken}` },
+    });
+
+    expect(response.status()).toBe(404);
+    expect(await response.text()).toBe("Not Found");
+  });
+
+  test("should return error: update using ony 1 field in payload", async ({
+    request,
+  }) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.put(`${bookingUrl}/1`, {
+      data: updatedBookingPayload.bookingdates,
+      headers: { cookie: `token=${authToken}` },
+    });
+
+    expect(response.status()).toBe(400);
+  });
 
   // other cases to be checked if the API would not rotate data
   // "should accept new names"
@@ -431,9 +469,9 @@ test.describe("@api update booking via PUT", () => {
 });
 
 test.describe("@api @patch update booking partially", () => {
-  test("should update part of booking using JSON", async ({ request }) => {});
+  test("should update part of booking using JSON - first name", async ({ request }) => {});
 
-  // "should update part of booking using XML"
+  // "should update part of booking using XML - last name"
   // "should update part of booking: lower price"
   // "should update part of booking: add additional needs"
   // "should update part of booking: remove additional needs"
