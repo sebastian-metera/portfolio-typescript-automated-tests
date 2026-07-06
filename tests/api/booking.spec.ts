@@ -53,6 +53,7 @@ async function getAuthToken(request: APIRequestContext): Promise<string> {
   const { token } = await response.json();
   return token;
 }
+//TODO: ask for token once by assigning it to global variable; to be done when getAuthToken moved to client class
 
 function expectJsonContentType(response: APIResponse) {
   expect(response.headers()["content-type"]).toContain("application/json");
@@ -461,7 +462,7 @@ test.describe("@api update booking via PUT", () => {
     expect(response.status()).toBe(400);
   });
 
-  // other cases to be checked if the API would not rotate data
+  // other cases to be checked with getting by bookingId if the API would not rotate data
   // "should accept new names"
   // "should accept lower price"
   // "should add additional needs" // for booking that has no additional needs
@@ -469,13 +470,72 @@ test.describe("@api update booking via PUT", () => {
 });
 
 test.describe("@api @patch update booking partially", () => {
-  test("should update part of booking using JSON - first name", async ({ request }) => {});
+  test("should update part of booking using JSON - first name", async ({
+    request,
+  }) => {
+    // use spread or rest to extract the field that has to be replaced from the 'updatedBookingPayload'
+    const authToken = await getAuthToken(request);
+    const response = await request.patch(`${bookingUrl}/10`, {
+      data: { firstname: "John" },
+      headers: { cookie: `token=${authToken}` },
+    });
 
-  // "should update part of booking using XML - last name"
-  // "should update part of booking: lower price"
+    expect(response.status()).toBe(200);
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toMatchObject({ firstname: "John" });
+    //TODO: use rest or spread to re-use `updatedBookingPayload`
+  });
+
+  test("should update part of booking using XML - last name", async ({
+    request,
+  }) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.patch(`${bookingUrl}/10`, {
+      data: `<booking>
+        <lastname>Doughie</lastname>
+      </booking>`,
+      headers: {
+        cookie: `token=${authToken}`,
+        "content-type": "text/xml",
+        accept: "application/xml",
+      },
+    });
+
+    expect(response.status()).toBe(200);
+    // expect(response.headers()["content-type"]).toBe("application/xml");
+    // yeah, request has "application/xml" in "accept" header but server responds with the "text/html" anyway...
+    expect(response.headers()["content-type"]).toContain("text/html");
+
+    const responseBody = await response.text();
+    expect(responseBody).toContain("<lastname>Doughie</lastname>");
+    expect(responseBody).toContain("<checkin>2026-09-22</checkin>");
+    expect(responseBody).toContain("<checkout>2023-03-24</checkout>");
+  });
+
+  test("should update part of booking: lower price", async ({ request }) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.patch(`${bookingUrl}/12`, {
+      data: {
+        totalprice: 99,
+      },
+      headers: { cookie: `token=${authToken}` },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toMatchObject({totalprice: 99});
+
+    //TODO: use rest or spread to re-use `updatedBookingPayload`
+  });
+
+  // "should update part of booking: change deposit to true"
   // "should update part of booking: add additional needs"
   // "should update part of booking: remove additional needs"
-  // "should update booking using many fields at once: names"
-  // "should update booking using many fields at once: price and dates"
+  // "should update booking using multiple fields at once: both names"
+  // "should update booking using multiple fields at once: higher price, deposit to true and dates"
   // ""
 });
