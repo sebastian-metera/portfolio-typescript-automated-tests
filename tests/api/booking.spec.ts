@@ -71,6 +71,17 @@ const updatedBookingPayload = {
   additionalneeds: "Breakfast",
 };
 
+const patchBookingModel = {
+  firstname: "Joe",
+  lastname: "Doe",
+  totalprice: 128,
+  depositpaid: false,
+  bookingdates: {
+    checkin: "2027-11-01",
+    checkout: "2027-11-11",
+  },
+};
+
 test.describe("@api get booking ids", () => {
   test("get all booking ids", async ({ request }) => {
     type BookingIdResponse = {
@@ -473,7 +484,6 @@ test.describe("@api @patch update booking partially", () => {
   test("should update part of booking using JSON - first name", async ({
     request,
   }) => {
-    // use spread or rest to extract the field that has to be replaced from the 'updatedBookingPayload'
     const authToken = await getAuthToken(request);
     const response = await request.patch(`${bookingUrl}/10`, {
       data: { firstname: "John" },
@@ -484,8 +494,7 @@ test.describe("@api @patch update booking partially", () => {
 
     const responseBody = await response.json();
 
-    expect(responseBody).toMatchObject({ firstname: "John" });
-    //TODO: use rest or spread to re-use `updatedBookingPayload`
+    expect(responseBody).toEqual({ ...patchBookingModel, firstname: "John" });
   });
 
   test("should update part of booking using XML - last name", async ({
@@ -516,7 +525,7 @@ test.describe("@api @patch update booking partially", () => {
 
   test("should update part of booking: lower price", async ({ request }) => {
     const authToken = await getAuthToken(request);
-    const response = await request.patch(`${bookingUrl}/12`, {
+    const response = await request.patch(`${bookingUrl}/11`, {
       data: {
         totalprice: 99,
       },
@@ -527,15 +536,45 @@ test.describe("@api @patch update booking partially", () => {
 
     const responseBody = await response.json();
 
-    expect(responseBody).toMatchObject({totalprice: 99});
-
-    //TODO: use rest or spread to re-use `updatedBookingPayload`
+    expect(responseBody).toEqual({ ...patchBookingModel, totalprice: 99 });
   });
 
-  // "should update part of booking: change deposit to true"
-  // "should update part of booking: add additional needs"
+  test("should update part of booking: mark deposit as paid", async ({
+    request,
+  }) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.patch(`${bookingUrl}/12`, {
+      data: { depositpaid: true },
+      headers: { cookie: `token=${authToken}` },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toEqual({ ...patchBookingModel, depositpaid: true });
+  });
+
+  test("should update part of booking: add additional needs", async ({
+    request,
+  }) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.patch(`${bookingUrl}/13`, {
+      data: { additionalneeds: "Bathroom with a shower" },
+      headers: { cookie: `token=${authToken}` },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toEqual({
+      ...patchBookingModel,
+      additionalneeds: "Bathroom with a shower",
+    });
+  });
+
   // "should update part of booking: remove additional needs"
   // "should update booking using multiple fields at once: both names"
   // "should update booking using multiple fields at once: higher price, deposit to true and dates"
-  // ""
 });
