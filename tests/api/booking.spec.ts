@@ -59,7 +59,7 @@ function expectJsonContentType(response: APIResponse) {
   expect(response.headers()["content-type"]).toContain("application/json");
 }
 
-const updatedBookingPayload = {
+const fullyUpdatedBookingPayload = {
   firstname: "James",
   lastname: "Brown",
   totalprice: 111,
@@ -71,7 +71,7 @@ const updatedBookingPayload = {
   additionalneeds: "Breakfast",
 };
 
-const patchBookingModel = {
+const partUpdateBookingModel = {
   firstname: "Joe",
   lastname: "Doe",
   totalprice: 128,
@@ -80,6 +80,18 @@ const patchBookingModel = {
     checkin: "2027-11-01",
     checkout: "2027-11-11",
   },
+};
+
+const partUpdatedBookingDetails = {
+  firstname: "John",
+  lastname: "Doughie",
+  totalprice: 256,
+  depositpaid: true,
+  bookingdates: {
+    checkin: "2027-11-01",
+    checkout: "2027-11-22",
+  },
+  additionalneeds: "Bathroom with a shower",
 };
 
 test.describe("@api get booking ids", () => {
@@ -369,7 +381,7 @@ test.describe("@api update booking via PUT", () => {
   test("should update booking using JSON - new dates", async ({ request }) => {
     const token = await getAuthToken(request);
     const response = await request.put(`${bookingUrl}/1`, {
-      data: updatedBookingPayload,
+      data: fullyUpdatedBookingPayload,
       headers: { cookie: `token=${token}` },
     });
 
@@ -377,7 +389,7 @@ test.describe("@api update booking via PUT", () => {
 
     const responseBody = await response.json();
 
-    expect(responseBody).toEqual(updatedBookingPayload);
+    expect(responseBody).toEqual(fullyUpdatedBookingPayload);
   });
 
   test("should update booking using XML", async ({ request }) => {
@@ -419,7 +431,7 @@ test.describe("@api update booking via PUT", () => {
     request,
   }) => {
     const response = await request.put(`${bookingUrl}/1`, {
-      data: updatedBookingPayload,
+      data: fullyUpdatedBookingPayload,
       headers: { authorization: "Basic YWRtaW46cGFzc3dvcmQxMjM=" }, //TODO: move token value to .env despite it's public
     });
 
@@ -428,12 +440,12 @@ test.describe("@api update booking via PUT", () => {
 
     const responseBody = await response.json();
 
-    expect(responseBody).toEqual(updatedBookingPayload);
+    expect(responseBody).toEqual(fullyUpdatedBookingPayload);
   });
 
   test("should return error: missing token", async ({ request }) => {
     const response = await request.put(`${bookingUrl}/1`, {
-      data: updatedBookingPayload,
+      data: fullyUpdatedBookingPayload,
     });
 
     expect(response.status()).toBe(403); //would expect 401, but since they return 403... let it be!
@@ -442,7 +454,7 @@ test.describe("@api update booking via PUT", () => {
 
   test("should return error: wrong token", async ({ request }) => {
     const response = await request.put(`${bookingUrl}/1`, {
-      data: updatedBookingPayload,
+      data: fullyUpdatedBookingPayload,
       headers: { cookie: "invalid-token" },
     });
 
@@ -453,7 +465,7 @@ test.describe("@api update booking via PUT", () => {
   test("should return error: missing booking id", async ({ request }) => {
     const authToken = await getAuthToken(request);
     const response = await request.put(`${bookingUrl}`, {
-      data: updatedBookingPayload,
+      data: fullyUpdatedBookingPayload,
       headers: { cookie: `token=${authToken}` },
     });
 
@@ -466,7 +478,7 @@ test.describe("@api update booking via PUT", () => {
   }) => {
     const authToken = await getAuthToken(request);
     const response = await request.put(`${bookingUrl}/1`, {
-      data: updatedBookingPayload.bookingdates,
+      data: fullyUpdatedBookingPayload.bookingdates,
       headers: { cookie: `token=${authToken}` },
     });
 
@@ -485,8 +497,10 @@ test.describe("@api @patch update booking partially", () => {
     request,
   }) => {
     const authToken = await getAuthToken(request);
+    const { firstname: newFirstName } = partUpdatedBookingDetails;
     const response = await request.patch(`${bookingUrl}/10`, {
-      data: { firstname: "John" },
+      // data: { firstname: "John" },
+      data: { firstname: newFirstName },
       headers: { cookie: `token=${authToken}` },
     });
 
@@ -494,14 +508,17 @@ test.describe("@api @patch update booking partially", () => {
 
     const responseBody = await response.json();
 
-    expect(responseBody).toEqual({ ...patchBookingModel, firstname: "John" });
+    expect(responseBody).toEqual({
+      ...partUpdateBookingModel,
+      firstname: newFirstName,
+    });
   });
 
   test("should update part of booking using XML - last name", async ({
     request,
   }) => {
     const authToken = await getAuthToken(request);
-    const response = await request.patch(`${bookingUrl}/10`, {
+    const response = await request.patch(`${bookingUrl}/3`, {
       data: `<booking>
         <lastname>Doughie</lastname>
       </booking>`,
@@ -519,8 +536,8 @@ test.describe("@api @patch update booking partially", () => {
 
     const responseBody = await response.text();
     expect(responseBody).toContain("<lastname>Doughie</lastname>");
-    expect(responseBody).toContain("<checkin>2026-09-22</checkin>");
-    expect(responseBody).toContain("<checkout>2023-03-24</checkout>");
+    expect(responseBody).toContain("<checkin>2016-10-01</checkin>");
+    expect(responseBody).toContain("<checkout>2016-12-27</checkout>");
   });
 
   test("should update part of booking: lower price", async ({ request }) => {
@@ -536,7 +553,7 @@ test.describe("@api @patch update booking partially", () => {
 
     const responseBody = await response.json();
 
-    expect(responseBody).toEqual({ ...patchBookingModel, totalprice: 99 });
+    expect(responseBody).toEqual({ ...partUpdateBookingModel, totalprice: 99 });
   });
 
   test("should update part of booking: mark deposit as paid", async ({
@@ -552,15 +569,19 @@ test.describe("@api @patch update booking partially", () => {
 
     const responseBody = await response.json();
 
-    expect(responseBody).toEqual({ ...patchBookingModel, depositpaid: true });
+    expect(responseBody).toEqual({
+      ...partUpdateBookingModel,
+      depositpaid: true,
+    });
   });
 
   test("should update part of booking: add additional needs", async ({
     request,
   }) => {
     const authToken = await getAuthToken(request);
+    const { additionalneeds: newAdditionalNeeds } = partUpdatedBookingDetails;
     const response = await request.patch(`${bookingUrl}/13`, {
-      data: { additionalneeds: "Bathroom with a shower" },
+      data: { additionalneeds: newAdditionalNeeds},
       headers: { cookie: `token=${authToken}` },
     });
 
@@ -569,12 +590,79 @@ test.describe("@api @patch update booking partially", () => {
     const responseBody = await response.json();
 
     expect(responseBody).toEqual({
-      ...patchBookingModel,
-      additionalneeds: "Bathroom with a shower",
+      ...partUpdateBookingModel,
+      additionalneeds: newAdditionalNeeds,
     });
   });
 
-  // "should update part of booking: remove additional needs"
-  // "should update booking using multiple fields at once: both names"
-  // "should update booking using multiple fields at once: higher price, deposit to true and dates"
+  test("should update part of booking: erase additional needs", async ({
+    request,
+  }) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.patch(`${bookingUrl}/14`, {
+      data: { additionalneeds: "" },
+      headers: { cookie: `token=${authToken}` },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toEqual({
+      ...partUpdateBookingModel,
+      additionalneeds: "",
+    });
+  });
+
+  test("should update booking using multiple fields at once: both names", async ({
+    request,
+  }) => {
+    const authToken = await getAuthToken(request);
+    const {firstname: newFirstName, lastname: newLastName} = partUpdatedBookingDetails;
+    const response = await request.patch(`${bookingUrl}/15`, {
+      data: { firstname: newFirstName, lastname: newLastName },
+      headers: { cookie: `token=${authToken}` },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toEqual({
+      ...partUpdateBookingModel,
+      firstname: newFirstName,
+      lastname: newLastName,
+    });
+  });
+
+  test("should update booking using multiple fields at once: higher price, deposit to true and dates", async ({
+    request,
+  }) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.patch(`${bookingUrl}/16`, {
+      data: {
+        totalprice: 256,
+        depositpaid: true,
+        bookingdates: {
+          checkin: "2027-11-01",
+          checkout: "2027-11-22",
+        },
+      },
+      headers: { cookie: `token=${authToken}` },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const responseBody = await response.json();
+
+    expect(responseBody).toEqual({
+      ...partUpdateBookingModel,
+      totalprice: 256,
+      depositpaid: true,
+      bookingdates: {
+        checkin: "2027-11-01",
+        checkout: "2027-11-22",
+      },
+    });
+  });
 });
