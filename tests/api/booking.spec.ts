@@ -581,7 +581,7 @@ test.describe("@api @patch update booking partially", () => {
     const authToken = await getAuthToken(request);
     const { additionalneeds: newAdditionalNeeds } = partUpdatedBookingDetails;
     const response = await request.patch(`${bookingUrl}/13`, {
-      data: { additionalneeds: newAdditionalNeeds},
+      data: { additionalneeds: newAdditionalNeeds },
       headers: { cookie: `token=${authToken}` },
     });
 
@@ -618,7 +618,8 @@ test.describe("@api @patch update booking partially", () => {
     request,
   }) => {
     const authToken = await getAuthToken(request);
-    const {firstname: newFirstName, lastname: newLastName} = partUpdatedBookingDetails;
+    const { firstname: newFirstName, lastname: newLastName } =
+      partUpdatedBookingDetails;
     const response = await request.patch(`${bookingUrl}/15`, {
       data: { firstname: newFirstName, lastname: newLastName },
       headers: { cookie: `token=${authToken}` },
@@ -664,5 +665,42 @@ test.describe("@api @patch update booking partially", () => {
         checkout: "2027-11-22",
       },
     });
+  });
+});
+
+test.describe("@api @delete cancel (delete) booking", () => {
+  test("should delete booking with valid token", async ({ request }) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.delete(`${bookingUrl}/20`, {
+      headers: { cookie: `token=${authToken}` },
+    });
+
+    expect(response.status()).toBe(201); //yeah, nice response for deleting resource...
+  });
+
+  test("should not delete booking without token", async ({ request }) => {
+    const response = await request.delete(`${bookingUrl}/21`);
+
+    expect(response.ok()).toBeFalsy;
+    expect(response.status()).toBe(403); //this is how they return, I'd rather see 401 here
+    expect(await response.text()).toBe("Forbidden");
+  });
+
+  test("should not delete booking with invalid token", async ({request}) => {
+    const authToken = "1NV4L1D";
+    const response = await request.delete(`${bookingUrl}/22`, {headers: {cookie: `token=${authToken}`}});
+
+    expect(response.ok()).toBeFalsy;
+    expect(response.status()).toBe(403);
+    expect(await response.text()).toBe("Forbidden");
+  });
+
+  test("should return 405 for trying to delete unexisting booking", async ({request}) => {
+    const authToken = await getAuthToken(request);
+    const response = await request.delete(`${bookingUrl}/9999`, {headers: {cookie: `token=${authToken}`}});
+
+    expect(response.ok()).toBeFalsy;
+    expect(response.status()).toBe(405); //this is how they return - "Method not allowed" instead "Not found"...
+    expect(await response.text()).toBe("Method Not Allowed");
   });
 });
