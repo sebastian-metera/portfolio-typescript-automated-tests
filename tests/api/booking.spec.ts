@@ -46,6 +46,18 @@ async function createBooking(
   return request.post(bookingUrl, { data: payload, headers: headers });
 }
 
+async function updateWholeBooking(
+  bookingId: number | string,
+  request: APIRequestContext,
+  payload: Payload | string,
+  authHeader?: { cookie: string } | { authorization: string },
+): Promise<APIResponse> {
+  return request.put(`${bookingUrl}/${bookingId}`, {
+    data: payload,
+    headers: authHeader,
+  });
+}
+
 async function getAuthToken(request: APIRequestContext): Promise<string> {
   const response = await request.post(`${testConfig.apiBaseUrl}/auth`, {
     data: { username: "admin", password: "password123" },
@@ -94,7 +106,7 @@ const partUpdatedBookingDetails = {
   additionalneeds: "Bathroom with a shower",
 };
 
-test.describe("@api get booking ids", () => {
+test.describe("@api @get return booking ids", () => {
   test("get all booking ids", async ({ request }) => {
     type BookingIdResponse = {
       bookingid: number;
@@ -217,7 +229,7 @@ test.describe("@api get booking ids", () => {
   });
 });
 
-test.describe("@api get bookings by id", () => {
+test.describe("@api @get return booking details by id", () => {
   test("should return all fields of details of specific booking", async ({
     request,
   }) => {
@@ -273,7 +285,7 @@ test.describe("@api get bookings by id", () => {
   });
 });
 
-test.describe("@api create booking", () => {
+test.describe("@api @post create booking", () => {
   test("should create booking using JSON explicitly", async ({ request }) => {
     const payload = {
       firstname: "Betty",
@@ -377,13 +389,16 @@ test.describe("@api create booking", () => {
   // should return error: price not a number
 });
 
-test.describe("@api update booking via PUT", () => {
+test.describe("@api @put update whole booking", () => {
   test("should update booking using JSON - new dates", async ({ request }) => {
-    const token = await getAuthToken(request);
-    const response = await request.put(`${bookingUrl}/1`, {
-      data: fullyUpdatedBookingPayload,
-      headers: { cookie: `token=${token}` },
-    });
+    const authToken = await getAuthToken(request);
+    const authTokenHeader = { cookie: `token=${authToken}` };
+    const response = await updateWholeBooking(
+      1,
+      request,
+      fullyUpdatedBookingPayload,
+      authTokenHeader,
+    );
 
     expect(response.status()).toBe(200);
 
@@ -406,7 +421,7 @@ test.describe("@api update booking via PUT", () => {
     <additionalneeds>Breakfast</additionalneeds>
     </booking>`;
     const authToken = await getAuthToken(request);
-    const response = await request.put(`${bookingUrl}/1`, {
+    const response = await request.put(`${bookingUrl}/2`, {
       data: updatedBookingPayloadXml,
       headers: {
         cookie: `token=${authToken}`,
@@ -430,10 +445,14 @@ test.describe("@api update booking via PUT", () => {
   test("should update booking using auth via 'Authorization' header", async ({
     request,
   }) => {
-    const response = await request.put(`${bookingUrl}/1`, {
-      data: fullyUpdatedBookingPayload,
-      headers: { authorization: "Basic YWRtaW46cGFzc3dvcmQxMjM=" }, //TODO: move token value to .env despite it's public
-    });
+    //TODO: move token value to .env despite it's public
+    const authTokenHeader = { authorization: "Basic YWRtaW46cGFzc3dvcmQxMjM=" };
+    const response = await updateWholeBooking(
+      3,
+      request,
+      fullyUpdatedBookingPayload,
+      authTokenHeader,
+    );
 
     expect(response.status()).toBe(200);
     expect(response.headers()["content-type"]).toContain("application/json");
@@ -444,19 +463,24 @@ test.describe("@api update booking via PUT", () => {
   });
 
   test("should return error: missing token", async ({ request }) => {
-    const response = await request.put(`${bookingUrl}/1`, {
-      data: fullyUpdatedBookingPayload,
-    });
+    const response = await updateWholeBooking(
+      4,
+      request,
+      fullyUpdatedBookingPayload,
+    );
 
     expect(response.status()).toBe(403); //would expect 401, but since they return 403... let it be!
     expect(await response.text()).toBe("Forbidden");
   });
 
   test("should return error: wrong token", async ({ request }) => {
-    const response = await request.put(`${bookingUrl}/1`, {
-      data: fullyUpdatedBookingPayload,
-      headers: { cookie: "invalid-token" },
-    });
+    const invalidAuthTokenHeader = { cookie: "invalid-token" };
+    const response = await updateWholeBooking(
+      5,
+      request,
+      fullyUpdatedBookingPayload,
+      invalidAuthTokenHeader,
+    );
 
     expect(response.status()).toBe(403);
     expect(await response.text()).toBe("Forbidden");
@@ -464,10 +488,14 @@ test.describe("@api update booking via PUT", () => {
 
   test("should return error: missing booking id", async ({ request }) => {
     const authToken = await getAuthToken(request);
-    const response = await request.put(`${bookingUrl}`, {
-      data: fullyUpdatedBookingPayload,
-      headers: { cookie: `token=${authToken}` },
-    });
+    const authTokenHeader = { cookie: `token=${authToken}` };
+    const noBookingId = "";
+    const response = await updateWholeBooking(
+      noBookingId,
+      request,
+      fullyUpdatedBookingPayload,
+      authTokenHeader,
+    );
 
     expect(response.status()).toBe(404);
     expect(await response.text()).toBe("Not Found");
@@ -477,15 +505,18 @@ test.describe("@api update booking via PUT", () => {
     request,
   }) => {
     const authToken = await getAuthToken(request);
-    const response = await request.put(`${bookingUrl}/1`, {
-      data: fullyUpdatedBookingPayload.bookingdates,
-      headers: { cookie: `token=${authToken}` },
-    });
+    const authTokenHeader = { cookie: `token=${authToken}` };
+    const response = await updateWholeBooking(
+      6,
+      request,
+      fullyUpdatedBookingPayload.additionalneeds,
+      authTokenHeader,
+    );
 
     expect(response.status()).toBe(400);
   });
 
-  // other cases to be checked with getting by bookingId if the API would not rotate data
+  // TODO: check other cases of changing specific data
   // "should accept new names"
   // "should accept lower price"
   // "should add additional needs" // for booking that has no additional needs
@@ -686,18 +717,24 @@ test.describe("@api @delete cancel (delete) booking", () => {
     expect(await response.text()).toBe("Forbidden");
   });
 
-  test("should not delete booking with invalid token", async ({request}) => {
+  test("should not delete booking with invalid token", async ({ request }) => {
     const authToken = "1NV4L1D";
-    const response = await request.delete(`${bookingUrl}/22`, {headers: {cookie: `token=${authToken}`}});
+    const response = await request.delete(`${bookingUrl}/22`, {
+      headers: { cookie: `token=${authToken}` },
+    });
 
     expect(response.ok()).toBeFalsy;
     expect(response.status()).toBe(403);
     expect(await response.text()).toBe("Forbidden");
   });
 
-  test("should return 405 for trying to delete unexisting booking", async ({request}) => {
+  test("should return 405 for trying to delete unexisting booking", async ({
+    request,
+  }) => {
     const authToken = await getAuthToken(request);
-    const response = await request.delete(`${bookingUrl}/9999`, {headers: {cookie: `token=${authToken}`}});
+    const response = await request.delete(`${bookingUrl}/9999`, {
+      headers: { cookie: `token=${authToken}` },
+    });
 
     expect(response.ok()).toBeFalsy;
     expect(response.status()).toBe(405); //this is how they return - "Method not allowed" instead "Not found"...
